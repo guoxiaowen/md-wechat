@@ -1,0 +1,1254 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Markdown → 公众号</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; height: 100%; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif; }
+  body { display: flex; flex-direction: column; background: #f5f5f5; color: #222; }
+
+  .toolbar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 16px;
+    background: #fff;
+    border-bottom: 1px solid #e5e5e5;
+    flex-wrap: wrap;
+  }
+  .toolbar label { font-size: 13px; color: #666; }
+  .toolbar select, .toolbar button {
+    font-size: 13px;
+    padding: 6px 12px;
+    border: 1px solid #d0d0d0;
+    border-radius: 4px;
+    background: #fff;
+    color: #333;
+    cursor: pointer;
+    font-family: inherit;
+  }
+  .toolbar button:hover { background: #f0f0f0; }
+  .toolbar .copy-btn {
+    background: #1a8917;
+    color: #fff;
+    border-color: #1a8917;
+    font-weight: 600;
+    margin-left: auto;
+  }
+  .toolbar .copy-btn:hover { background: #156d12; }
+  .toolbar .danger:hover { background: #fee; border-color: #f5b3b3; color: #c00; }
+
+  .main { flex: 1; display: flex; overflow: hidden; }
+  .pane { flex: 1; display: flex; flex-direction: column; min-width: 0; background: #fff; }
+  .pane + .pane { border-left: 1px solid #e5e5e5; }
+  .pane-header { padding: 6px 14px; font-size: 12px; color: #999; background: #fafafa; border-bottom: 1px solid #eee; }
+
+  #editor {
+    flex: 1;
+    width: 100%;
+    border: none;
+    outline: none;
+    padding: 20px 24px;
+    font-family: "SF Mono", Menlo, Consolas, "PingFang SC", monospace;
+    font-size: 14px;
+    line-height: 1.7;
+    resize: none;
+    background: #fff;
+    color: #222;
+  }
+
+  #preview {
+    flex: 1;
+    overflow-y: auto;
+    padding: 20px 24px;
+    background: #fff;
+  }
+  #preview.collapsed { display: none; }
+  .pane.preview-pane.collapsed { flex: 0 0 0; display: none; }
+
+  .footer {
+    padding: 6px 16px;
+    background: #fff;
+    border-top: 1px solid #e5e5e5;
+    font-size: 12px;
+    color: #888;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .help-btn { background: #f0f8ff !important; border-color: #b3d8ff !important; color: #0066cc !important; }
+  .help-btn:hover { background: #e0f0ff !important; }
+
+  .find-bar {
+    display: none;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 16px;
+    background: #fffbe6;
+    border-bottom: 1px solid #f0d77a;
+  }
+  .find-bar.show { display: flex; }
+  .find-bar input[type=text] {
+    font-size: 13px;
+    padding: 4px 8px;
+    border: 1px solid #d0d0d0;
+    border-radius: 3px;
+    font-family: inherit;
+    width: 160px;
+    outline: none;
+  }
+  .find-bar input[type=text]:focus { border-color: #0066cc; }
+  .find-bar button {
+    font-size: 12px;
+    padding: 4px 8px;
+    border: 1px solid #d0d0d0;
+    background: #fff;
+    border-radius: 3px;
+    cursor: pointer;
+    font-family: inherit;
+    color: #333;
+  }
+  .find-bar button:hover { background: #f0f0f0; }
+  .find-bar button:disabled { opacity: 0.4; cursor: not-allowed; }
+  .find-bar .count {
+    font-size: 12px;
+    color: #888;
+    min-width: 56px;
+    text-align: center;
+  }
+  .find-bar .count.no-match { color: #c00; }
+  .find-bar label {
+    font-size: 12px;
+    color: #666;
+    user-select: none;
+    cursor: pointer;
+  }
+  .find-bar .spacer { flex: 1; }
+  .find-bar .close {
+    background: none !important;
+    border: none !important;
+    font-size: 18px !important;
+    color: #888 !important;
+    padding: 0 6px !important;
+  }
+  .find-bar .close:hover { color: #c00 !important; }
+
+  .modal-mask {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.4);
+    display: none;
+    align-items: center; justify-content: center;
+    z-index: 2000;
+  }
+  .modal-mask.show { display: flex; }
+  .modal {
+    background: #fff;
+    width: min(720px, 92vw);
+    max-height: 86vh;
+    border-radius: 8px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+  }
+  .modal-header {
+    padding: 14px 20px;
+    border-bottom: 1px solid #eee;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .modal-header h3 { margin: 0; font-size: 16px; color: #222; }
+  .modal-close {
+    background: none; border: none; font-size: 20px; cursor: pointer;
+    color: #888; padding: 0 8px; line-height: 1;
+  }
+  .modal-close:hover { color: #c00; }
+  .modal-tabs {
+    display: flex;
+    background: #fafafa;
+    border-bottom: 1px solid #eee;
+  }
+  .modal-tabs button {
+    flex: 1;
+    padding: 12px 16px;
+    border: none;
+    background: none;
+    font-size: 14px;
+    cursor: pointer;
+    color: #666;
+    font-weight: 500;
+    border-bottom: 2px solid transparent;
+    font-family: inherit;
+  }
+  .modal-tabs button.active {
+    color: #0066cc;
+    border-bottom-color: #0066cc;
+    background: #fff;
+  }
+  .modal-body {
+    padding: 20px 24px;
+    overflow-y: auto;
+    flex: 1;
+    line-height: 1.7;
+    font-size: 14px;
+    color: #333;
+  }
+  .modal-body h4 { margin: 18px 0 8px; color: #222; font-size: 15px; }
+  .modal-body h4:first-child { margin-top: 0; }
+  .modal-body p { margin: 6px 0; }
+  .modal-body .example {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin: 6px 0 14px;
+  }
+  .modal-body .example .src,
+  .modal-body .example .out {
+    padding: 10px 12px;
+    border-radius: 4px;
+    font-size: 13px;
+    line-height: 1.6;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  .modal-body .example .src {
+    background: #f5f5f5;
+    font-family: "SF Mono", Menlo, Consolas, monospace;
+    color: #444;
+  }
+  .modal-body .example .out {
+    background: #fff;
+    border: 1px solid #e8e8e8;
+    color: #222;
+  }
+  .modal-body .tip {
+    background: #fff8e1;
+    border-left: 3px solid #f0c040;
+    padding: 8px 12px;
+    margin: 12px 0;
+    font-size: 13px;
+    color: #7a5500;
+    border-radius: 0 4px 4px 0;
+  }
+
+  .toast {
+    position: fixed;
+    bottom: 36px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #333;
+    color: #fff;
+    padding: 10px 20px;
+    border-radius: 4px;
+    font-size: 14px;
+    opacity: 0;
+    transition: opacity 0.2s;
+    pointer-events: none;
+    z-index: 1000;
+  }
+  .toast.show { opacity: 1; }
+  .toast.error { background: #c0392b; }
+
+  @media (max-width: 720px) {
+    .main { flex-direction: column; }
+    .pane + .pane { border-left: none; border-top: 1px solid #e5e5e5; }
+  }
+</style>
+</head>
+<body>
+
+<div class="toolbar">
+  <label for="style-select">风格</label>
+  <select id="style-select"></select>
+  <button id="toggle-preview">折叠预览</button>
+  <button id="import-btn">导入 .md</button>
+  <input type="file" id="import-input" accept=".md,.markdown,.txt" style="display:none">
+  <button id="export-btn">导出 .md</button>
+  <button id="clear-btn" class="danger">清空</button>
+  <button id="find-open-btn" title="Cmd/Ctrl+F">查找替换</button>
+  <button id="help-btn" class="help-btn">1 分钟入门 markdown 语法</button>
+  <button id="copy-btn" class="copy-btn">复制到公众号</button>
+</div>
+
+<div class="modal-mask" id="help-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <h3>Markdown 语法速查</h3>
+      <button class="modal-close" id="help-close">×</button>
+    </div>
+    <div class="modal-tabs">
+      <button data-tab="basic" class="active">入门版</button>
+      <button data-tab="advanced">进阶版</button>
+    </div>
+    <div class="modal-body" id="help-body"></div>
+  </div>
+</div>
+
+<div class="find-bar" id="find-bar">
+  <input type="text" id="find-input" placeholder="查找">
+  <span class="count" id="find-count">0/0</span>
+  <button id="find-prev" title="上一个 (Shift+Enter)">↑</button>
+  <button id="find-next" title="下一个 (Enter)">↓</button>
+  <span style="color:#ddd">|</span>
+  <input type="text" id="replace-input" placeholder="替换为">
+  <button id="find-replace">替换</button>
+  <button id="find-replace-all">全部替换</button>
+  <span class="spacer"></span>
+  <label><input type="checkbox" id="find-case"> 区分大小写</label>
+  <button class="close" id="find-close" title="关闭 (Esc)">×</button>
+</div>
+
+<div class="main">
+  <div class="pane">
+    <div class="pane-header">编辑器（Markdown）</div>
+    <textarea id="editor" placeholder="在这里写 Markdown…&#10;&#10;支持：# 标题、**加粗**、*斜体*、- 列表、&gt; 引用、[链接](url)、---、| 表格 |&#10;&#10;Cmd/Ctrl+F 查找替换"></textarea>
+  </div>
+  <div class="pane preview-pane" id="preview-pane">
+    <div class="pane-header">预览（粘到公众号就是这样）</div>
+    <div id="preview"></div>
+  </div>
+</div>
+
+<div class="footer">
+  <span id="word-count">字数: 0</span>
+  <span style="color:#bbb">Cmd/Ctrl + B 加粗 · I 斜体 · K 链接</span>
+</div>
+
+<div id="toast" class="toast"></div>
+
+<script>
+/* ---------- 风格定义 ----------
+   每个风格 = 一组 selector → inline CSS string。
+   注意：避开 flex / ::before / ::after / position 等公众号会过滤的属性。
+   后续基于参考文章逐个精修。
+------------------------------ */
+const STYLES = {
+  classic: {
+    name: '经典蓝（doocs 默认）',
+    // 完整复刻 doocs/md 默认主题：主色 #0F4C81、前景 #3f3f3f、引用浅灰底
+    container: 'font-family: -apple-system-font,BlinkMacSystemFont,Helvetica Neue,PingFang SC,Hiragino Sans GB,Microsoft YaHei UI,Microsoft YaHei,Arial,sans-serif; font-size:16px; line-height:1.75;',
+    h1: 'display:table; padding:0 1em; border-bottom:2px solid #0F4C81; margin:2em auto 1em; color:#3f3f3f; font-size:19.2px; font-weight:bold; text-align:center;',
+    h2: 'display:table; padding:0 0.2em; margin:4em auto 2em; color:#fff; background:#0F4C81; font-size:19.2px; font-weight:bold; text-align:center;',
+    h3: 'padding-left:8px; border-left:3px solid #0F4C81; margin:2em 8px 0.75em 0; color:#3f3f3f; font-size:17.6px; font-weight:bold; line-height:1.2;',
+    p: 'margin:1.5em 8px; letter-spacing:0.1em; color:#3f3f3f;',
+    blockquote: 'font-style:normal; padding:1em; border-left:4px solid #0F4C81; border-radius:6px; color:#3f3f3f; background:#f7f7f7; margin-bottom:1em;',
+    ul: 'list-style:circle; padding-left:1em; margin-left:0; color:#3f3f3f;',
+    ol: 'padding-left:1em; margin-left:0; color:#3f3f3f;',
+    li: 'margin:0.2em 0 0.2em 8px; color:#3f3f3f;',
+    a: 'color:#576b95; text-decoration:none;',
+    strong: 'color:#0F4C81; font-weight:bold; font-size:inherit;',
+    em: 'font-style:italic; font-size:inherit;',
+    hr: 'border-style:solid; border-width:2px 0 0; border-color:rgba(0,0,0,0.1); transform-origin:0 0; transform:scale(1,0.5); height:0.4em; margin:1.5em 0;',
+    table: 'width:100%; border-collapse:collapse; margin:1.5em 8px; font-size:15px; color:#3f3f3f;',
+    thead: 'background:#0F4C81;',
+    th: 'border:1px solid #0F4C81; padding:8px 12px; color:#fff; font-weight:bold; text-align:center;',
+    td: 'border:1px solid #d0d0d0; padding:8px 12px; color:#3f3f3f;'
+  },
+  minimal: {
+    name: '简约黑白',
+    // 复刻 doocs/md 的样式属性结构（letter-spacing + color + 8px 横边距），让公众号识别为正规编辑器内容
+    container: 'font-family: -apple-system-font,BlinkMacSystemFont,Helvetica Neue,PingFang SC,Hiragino Sans GB,Microsoft YaHei UI,Microsoft YaHei,Arial,sans-serif; font-size:16px; line-height:1.75;',
+    h1: 'display:table; padding:0 1em; border-bottom:2px solid #000; margin:2em auto 1em; color:#3f3f3f; font-size:22px; font-weight:bold; text-align:center;',
+    h2: 'display:table; padding:0 0.2em; margin:4em auto 2em; color:#fff; background:#000; font-size:20px; font-weight:bold; text-align:center;',
+    h3: 'padding-left:8px; border-left:3px solid #000; margin:2em 8px 0.75em 0; color:#3f3f3f; font-size:18px; font-weight:bold; line-height:1.2;',
+    p: 'margin:1.5em 8px; letter-spacing:0.1em; color:#3f3f3f;',
+    blockquote: 'font-style:italic; padding:1em; border-left:4px solid #000; background:#f7f7f7; margin:2em 8px; color:#3f3f3f;',
+    ul: 'list-style:circle; padding-left:1em; margin-left:0; color:#3f3f3f;',
+    ol: 'list-style:decimal; padding-left:1em; margin-left:0; color:#3f3f3f;',
+    li: 'margin:0.2em 0 0.2em 8px; color:#3f3f3f;',
+    a: 'color:#0066cc; text-decoration:underline;',
+    strong: 'color:#000; font-weight:bold; font-size:inherit;',
+    em: 'font-style:italic; color:#3f3f3f;',
+    hr: 'border-style:solid; border-width:1px 0 0; border-color:rgba(0,0,0,0.1); transform-origin:0 0; transform:scale(1,0.5);',
+    table: 'width:100%; border-collapse:collapse; margin:1.5em 8px; font-size:15px; color:#3f3f3f;',
+    thead: 'background:#000;',
+    th: 'border:1px solid #000; padding:8px 12px; color:#fff; font-weight:bold; text-align:center;',
+    td: 'border:1px solid #ccc; padding:8px 12px; color:#3f3f3f;'
+  },
+  warm: {
+    name: '温暖米色',
+    container: 'font-family: -apple-system-font,BlinkMacSystemFont,Helvetica Neue,PingFang SC,Hiragino Sans GB,Microsoft YaHei UI,Microsoft YaHei,Arial,sans-serif; font-size:16px; line-height:1.85; background-color:#faf6ef; padding:20px;',
+    h1: 'display:table; padding:0 1em; border-bottom:2px solid #8b4513; margin:2em auto 1em; color:#8b4513; font-size:22px; font-weight:bold; text-align:center;',
+    h2: 'display:table; padding:0 0.2em; margin:4em auto 2em; color:#fff; background:#a0522d; font-size:20px; font-weight:bold; text-align:center;',
+    h3: 'padding-left:8px; border-left:3px solid #d4a574; margin:2em 8px 0.75em 0; color:#8b4513; font-size:18px; font-weight:bold; line-height:1.2;',
+    p: 'margin:1.5em 8px; letter-spacing:0.1em; color:#5d4037;',
+    blockquote: 'font-style:italic; padding:1em; border-left:4px solid #d4a574; background:#f5e6d3; margin:2em 8px; color:#6b4423;',
+    ul: 'list-style:circle; padding-left:1em; margin-left:0; color:#5d4037;',
+    ol: 'list-style:decimal; padding-left:1em; margin-left:0; color:#5d4037;',
+    li: 'margin:0.2em 0 0.2em 8px; color:#5d4037;',
+    a: 'color:#c0392b; text-decoration:underline;',
+    strong: 'color:#8b4513; font-weight:bold; font-size:inherit;',
+    em: 'font-style:italic; color:#a0522d;',
+    hr: 'border-style:dashed; border-width:1px 0 0; border-color:#d4a574;',
+    table: 'width:100%; border-collapse:collapse; margin:1.5em 8px; font-size:15px; color:#5d4037;',
+    thead: 'background:#a0522d;',
+    th: 'border:1px solid #a0522d; padding:8px 12px; color:#fff; font-weight:bold; text-align:center;',
+    td: 'border:1px solid #d4a574; padding:8px 12px; color:#5d4037; background:#faf6ef;'
+  },
+  business: {
+    name: '商务蓝调',
+    container: 'font-family: -apple-system-font,BlinkMacSystemFont,Helvetica Neue,PingFang SC,Hiragino Sans GB,Microsoft YaHei UI,Microsoft YaHei,Arial,sans-serif; font-size:16px; line-height:1.75;',
+    h1: 'display:table; padding:0 1em; border-bottom:2px solid #2c3e50; margin:2em auto 1em; color:#2c3e50; font-size:22px; font-weight:bold; text-align:center;',
+    h2: 'display:table; padding:0 0.2em; margin:4em auto 2em; color:#fff; background:#2c3e50; font-size:20px; font-weight:bold; text-align:center;',
+    h3: 'padding-left:8px; border-left:3px solid #3498db; margin:2em 8px 0.75em 0; color:#34495e; font-size:18px; font-weight:bold; line-height:1.2;',
+    p: 'margin:1.5em 8px; letter-spacing:0.1em; color:#2c3e50;',
+    blockquote: 'font-style:italic; padding:1em; border-left:4px solid #3498db; background:#ecf0f1; margin:2em 8px; color:#34495e;',
+    ul: 'list-style:circle; padding-left:1em; margin-left:0; color:#2c3e50;',
+    ol: 'list-style:decimal; padding-left:1em; margin-left:0; color:#2c3e50;',
+    li: 'margin:0.2em 0 0.2em 8px; color:#2c3e50;',
+    a: 'color:#3498db; text-decoration:underline;',
+    strong: 'color:#2c3e50; font-weight:bold; font-size:inherit;',
+    em: 'font-style:italic;',
+    hr: 'border-style:solid; border-width:2px 0 0; border-color:#3498db;',
+    table: 'width:100%; border-collapse:collapse; margin:1.5em 8px; font-size:15px; color:#2c3e50;',
+    thead: 'background:#2c3e50;',
+    th: 'border:1px solid #2c3e50; padding:8px 12px; color:#fff; font-weight:bold; text-align:center;',
+    td: 'border:1px solid #bdc3c7; padding:8px 12px; color:#2c3e50;'
+  }
+};
+
+/* ---------- Markdown 解析（支持范围：h1-h3、加粗、斜体、列表、引用、链接、分割线）---------- */
+function escapeHtml(s) {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function applyInline(text, S) {
+  text = escapeHtml(text);
+  const aAttr = S.a ? ` style="${S.a}"` : '';
+  const strongAttr = S.strong ? ` style="${S.strong}"` : '';
+  const emAttr = S.em ? ` style="${S.em}"` : '';
+  text = text.replace(/\[([^\]]+)\]\(([^)]+)\)/g, `<a href="$2"${aAttr}>$1</a>`);
+  text = text.replace(/\*\*([^*]+)\*\*/g, `<strong${strongAttr}>$1</strong>`);
+  text = text.replace(/(^|[^*])\*([^*\n]+)\*/g, `$1<em${emAttr}>$2</em>`);
+  text = text.replace(/(^|[^_])_([^_\n]+)_/g, `$1<em${emAttr}>$2</em>`);
+  text = text.replace(/\n/g, '<br>');
+  return text;
+}
+
+function isTableSeparator(line) {
+  if (line == null) return false;
+  const t = line.trim();
+  // 形如 | --- | :--- | ---: | :---: | （首尾的 | 可选）
+  return /^\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?\s*$/.test(t);
+}
+
+function splitTableRow(line) {
+  let l = line.trim();
+  if (l.startsWith('|')) l = l.slice(1);
+  if (l.endsWith('|')) l = l.slice(0, -1);
+  return l.split('|').map(s => s.trim());
+}
+
+function parseTableAlign(sepLine) {
+  return splitTableRow(sepLine).map(c => {
+    const left = c.startsWith(':');
+    const right = c.endsWith(':');
+    if (left && right) return 'center';
+    if (right) return 'right';
+    if (left) return 'left';
+    return '';
+  });
+}
+
+function parseMarkdown(text) {
+  const lines = text.split('\n');
+  const blocks = [];
+  let i = 0;
+  while (i < lines.length) {
+    const startLine = i;
+    const line = lines[i];
+    if (/^### (.+)/.test(line)) {
+      blocks.push({type:'h3', content: line.replace(/^### /, ''), line: startLine});
+      i++;
+    } else if (/^## (.+)/.test(line)) {
+      blocks.push({type:'h2', content: line.replace(/^## /, ''), line: startLine});
+      i++;
+    } else if (/^# (.+)/.test(line)) {
+      blocks.push({type:'h1', content: line.replace(/^# /, ''), line: startLine});
+      i++;
+    } else if (/^\s*-{3,}\s*$/.test(line)) {
+      blocks.push({type:'hr', line: startLine});
+      i++;
+    } else if (/^>\s?/.test(line)) {
+      const lns = [];
+      while (i < lines.length && /^>\s?/.test(lines[i])) {
+        lns.push(lines[i].replace(/^>\s?/, ''));
+        i++;
+      }
+      blocks.push({type:'blockquote', content: lns.join('\n'), line: startLine});
+    } else if (/^\s*[-*]\s+/.test(line)) {
+      const items = [];
+      while (i < lines.length && /^\s*[-*]\s+/.test(lines[i])) {
+        items.push(lines[i].replace(/^\s*[-*]\s+/, ''));
+        i++;
+      }
+      blocks.push({type:'ul', items, line: startLine});
+    } else if (/^\s*\d+\.\s+/.test(line)) {
+      const items = [];
+      while (i < lines.length && /^\s*\d+\.\s+/.test(lines[i])) {
+        items.push(lines[i].replace(/^\s*\d+\.\s+/, ''));
+        i++;
+      }
+      blocks.push({type:'ol', items, line: startLine});
+    } else if (/^\s*\|.*\|\s*$/.test(line) && isTableSeparator(lines[i+1])) {
+      const header = splitTableRow(line);
+      const aligns = parseTableAlign(lines[i+1]);
+      i += 2;
+      const rows = [];
+      while (i < lines.length && /^\s*\|/.test(lines[i]) && lines[i].trim() !== '') {
+        rows.push(splitTableRow(lines[i]));
+        i++;
+      }
+      blocks.push({type:'table', header, aligns, rows, line: startLine});
+    } else if (line.trim() === '') {
+      i++;
+    } else {
+      const para = [line];
+      i++;
+      while (i < lines.length
+             && lines[i].trim() !== ''
+             && !/^(#{1,3} |>|\s*-{3,}\s*$|\s*[-*]\s+|\s*\d+\.\s+|\s*\|)/.test(lines[i])) {
+        para.push(lines[i]);
+        i++;
+      }
+      blocks.push({type:'p', content: para.join('\n'), line: startLine});
+    }
+  }
+  return blocks;
+}
+
+function styleAttr(css) {
+  return css ? ` style="${css}"` : '';
+}
+
+function renderBlocks(blocks, S, withDataLine) {
+  let html = '';
+  for (const b of blocks) {
+    const dl = (withDataLine && b.line != null) ? ` data-line="${b.line}"` : '';
+    switch (b.type) {
+      case 'h1':
+        html += `<h1 class="h1" data-heading="true"${dl}${styleAttr(S.h1)}>${applyInline(b.content, S)}</h1>`;
+        break;
+      case 'h2':
+        html += `<h2 class="h2" data-heading="true"${dl}${styleAttr(S.h2)}>${applyInline(b.content, S)}</h2>`;
+        break;
+      case 'h3':
+        html += `<h3 class="h3" data-heading="true"${dl}${styleAttr(S.h3)}>${applyInline(b.content, S)}</h3>`;
+        break;
+      case 'p':
+        html += `<p class="p"${dl}${styleAttr(S.p)}>${applyInline(b.content, S)}</p>`;
+        break;
+      case 'hr':
+        html += `<hr class="hr"${dl}${styleAttr(S.hr)}>`;
+        break;
+      case 'blockquote': {
+        const inner = renderBlocks(parseMarkdown(b.content), S, false);
+        html += `<blockquote class="blockquote"${dl}${styleAttr(S.blockquote)}>${inner}</blockquote>`;
+        break;
+      }
+      case 'ul': {
+        const items = b.items.map(it =>
+          `<li class="listitem"${styleAttr(S.li)}>${applyInline(it, S)}</li>`).join('');
+        html += `<ul class="ul"${dl}${styleAttr(S.ul)}>${items}</ul>`;
+        break;
+      }
+      case 'ol': {
+        const items = b.items.map(it =>
+          `<li class="listitem"${styleAttr(S.li)}>${applyInline(it, S)}</li>`).join('');
+        html += `<ol class="ol"${dl}${styleAttr(S.ol)}>${items}</ol>`;
+        break;
+      }
+      case 'table': {
+        const colCount = b.header.length;
+        const thBase = S.th || '';
+        const tdBase = S.td || '';
+        const cellStyle = (base, idx) => {
+          const a = b.aligns[idx];
+          return a ? `${base}${base && !base.endsWith(';') ? ';' : ''}text-align:${a};` : base;
+        };
+        const headHtml = b.header.map((c, idx) =>
+          `<th${styleAttr(cellStyle(thBase, idx))}>${applyInline(c, S)}</th>`).join('');
+        const bodyHtml = b.rows.map(row => {
+          const cells = [];
+          for (let k = 0; k < colCount; k++) {
+            const c = row[k] != null ? row[k] : '';
+            cells.push(`<td${styleAttr(cellStyle(tdBase, k))}>${applyInline(c, S)}</td>`);
+          }
+          return `<tr${styleAttr(S.tr)}>${cells.join('')}</tr>`;
+        }).join('');
+        html += `<table class="table"${dl}${styleAttr(S.table)}><thead${styleAttr(S.thead)}><tr${styleAttr(S.tr)}>${headHtml}</tr></thead><tbody>${bodyHtml}</tbody></table>`;
+        break;
+      }
+    }
+  }
+  return html;
+}
+
+function renderToHtml(markdown, styleKey, withDataLine) {
+  const S = STYLES[styleKey];
+  const inner = renderBlocks(parseMarkdown(markdown), S, withDataLine);
+  const wrapped = `<section class="container mx-auto" style="${S.container||''}">${inner}</section>`;
+  if (withDataLine) return wrapped;
+  // 复刻 doocs/md：起手一个零高度填充段，告诉公众号编辑器"这是合规的内容流"
+  const padding = `<p style="font-size:0;line-height:0;margin:0;"></p>`;
+  return padding + wrapped;
+}
+
+/* ---------- DOM 引用 ---------- */
+const editor = document.getElementById('editor');
+const preview = document.getElementById('preview');
+const previewPane = document.getElementById('preview-pane');
+const styleSelect = document.getElementById('style-select');
+const wordCountEl = document.getElementById('word-count');
+const toast = document.getElementById('toast');
+
+/* 填充风格下拉 */
+for (const key of Object.keys(STYLES)) {
+  const opt = document.createElement('option');
+  opt.value = key;
+  opt.textContent = STYLES[key].name;
+  styleSelect.appendChild(opt);
+}
+
+/* ---------- 状态 ---------- */
+const STORAGE_KEY = 'md-wechat-draft-v1';
+const STYLE_KEY = 'md-wechat-style-v1';
+
+const SAMPLE = `# 欢迎使用 Markdown 公众号工具
+
+这是一个把 markdown 写作和公众号排版串起来的小工具。
+
+## 怎么用
+
+写完之后，**点右上角的"复制"按钮**，粘到公众号编辑器即可。
+
+## 支持的语法
+
+- 标题（# / ## / ###）
+- *斜体* 和 **加粗**
+- 列表（就是这一段）
+- > 引用块
+- [链接](https://example.com)
+- 分割线
+- 表格
+
+## 表格示例
+
+| 项目 | 用时 | 备注 |
+| :--- | :---: | ---: |
+| 写稿 | 60 分钟 | 思路清晰时 |
+| 排版 | 5 分钟 | 用这个工具 |
+| 配图 | 10 分钟 | 公众号里插 |
+
+---
+
+> 写完别忘了在公众号里手动插图。
+
+试试切换上方的"风格"下拉，看看不同效果。
+`;
+
+editor.value = localStorage.getItem(STORAGE_KEY) || SAMPLE;
+styleSelect.value = localStorage.getItem(STYLE_KEY) || 'minimal';
+if (!STYLES[styleSelect.value]) styleSelect.value = 'minimal';
+
+/* ---------- 渲染 + 字数 ---------- */
+let lastRendered = null;
+function render() {
+  try {
+    const html = renderToHtml(editor.value, styleSelect.value, true);
+    preview.innerHTML = html;
+    const text = preview.innerText.replace(/\s/g, '');
+    wordCountEl.textContent = `字数: ${text.length}`;
+    lastRendered = editor.value;
+  } catch (err) {
+    console.error('[render] 出错：', err);
+    preview.innerHTML = `<div style="padding:20px;color:#c0392b;background:#fee;border:1px solid #f5b3b3;border-radius:4px;font-family:monospace;font-size:13px;white-space:pre-wrap;">渲染出错：\n${(err && err.stack || err)}</div>`;
+  }
+}
+
+let saveTimer = null;
+function scheduleSave() {
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => {
+    try { localStorage.setItem(STORAGE_KEY, editor.value); } catch (e) { console.warn(e); }
+  }, 300);
+}
+
+function maybeRender() {
+  if (editor.value !== lastRendered) {
+    render();
+    scheduleSave();
+  }
+}
+
+// 多重事件触发，防御 input 事件被某些场景吃掉的情况
+editor.addEventListener('input', maybeRender);
+editor.addEventListener('change', maybeRender);
+editor.addEventListener('keyup', maybeRender);
+editor.addEventListener('paste', () => setTimeout(maybeRender, 0));
+editor.addEventListener('cut', () => setTimeout(maybeRender, 0));
+editor.addEventListener('drop', () => setTimeout(maybeRender, 0));
+// 兜底：每秒轮询一次（开销极小，确保不会出现"输入了但预览空"）
+setInterval(maybeRender, 1000);
+
+styleSelect.addEventListener('change', () => {
+  localStorage.setItem(STYLE_KEY, styleSelect.value);
+  render();
+});
+
+render();
+
+/* ---------- 滚动同步：基于 markdown 行号锚定 ----------
+   把当前编辑器顶部所在的 markdown 行，映射到对应的预览块，
+   滚动预览让该块出现在距顶部约 60px（约第 3 行）的位置。
+------------------------------------------------------ */
+let syncing = false;
+const TOP_OFFSET = 60; // 目标块距预览顶部的像素距离
+
+function getTopLineInEditor() {
+  const totalLines = editor.value.split('\n').length;
+  const max = editor.scrollHeight - editor.clientHeight;
+  if (max <= 0 || totalLines <= 1) return 0;
+  const ratio = editor.scrollTop / max;
+  return Math.floor(ratio * (totalLines - 1));
+}
+
+function getTopBlockInPreview() {
+  const blockEls = preview.querySelectorAll('[data-line]');
+  if (!blockEls.length) return null;
+  const previewRect = preview.getBoundingClientRect();
+  let target = blockEls[0];
+  for (const el of blockEls) {
+    const top = el.getBoundingClientRect().top - previewRect.top;
+    if (top + el.offsetHeight <= TOP_OFFSET) {
+      target = el;
+    } else {
+      break;
+    }
+  }
+  return target;
+}
+
+function syncEditorToPreview() {
+  if (syncing) return;
+  syncing = true;
+  try {
+    const topLine = getTopLineInEditor();
+    const blockEls = preview.querySelectorAll('[data-line]');
+    if (blockEls.length) {
+      let target = blockEls[0];
+      for (const el of blockEls) {
+        const ln = parseInt(el.dataset.line, 10);
+        if (ln <= topLine) target = el;
+        else break;
+      }
+      const previewRect = preview.getBoundingClientRect();
+      const targetTopInPreview =
+        target.getBoundingClientRect().top - previewRect.top + preview.scrollTop;
+      preview.scrollTop = Math.max(0, targetTopInPreview - TOP_OFFSET);
+    }
+  } finally {
+    setTimeout(() => syncing = false, 80);
+  }
+}
+
+function syncPreviewToEditor() {
+  if (syncing) return;
+  syncing = true;
+  try {
+    const target = getTopBlockInPreview();
+    if (target) {
+      const targetLine = parseInt(target.dataset.line, 10);
+      const totalLines = editor.value.split('\n').length;
+      if (totalLines > 1) {
+        const ratio = targetLine / (totalLines - 1);
+        const max = editor.scrollHeight - editor.clientHeight;
+        editor.scrollTop = ratio * max;
+      }
+    }
+  } finally {
+    setTimeout(() => syncing = false, 80);
+  }
+}
+
+editor.addEventListener('scroll', syncEditorToPreview);
+preview.addEventListener('scroll', syncPreviewToEditor);
+
+/* ---------- 折叠预览 ---------- */
+const togglePreviewBtn = document.getElementById('toggle-preview');
+togglePreviewBtn.addEventListener('click', () => {
+  previewPane.classList.toggle('collapsed');
+  togglePreviewBtn.textContent =
+    previewPane.classList.contains('collapsed') ? '展开预览' : '折叠预览';
+});
+
+/* ---------- 快捷键 Cmd/Ctrl+B/I/K ---------- */
+function wrapSelection(before, after) {
+  const s = editor.selectionStart, e = editor.selectionEnd;
+  const sel = editor.value.substring(s, e);
+  const next = editor.value.substring(0,s) + before + sel + after + editor.value.substring(e);
+  editor.value = next;
+  editor.selectionStart = s + before.length;
+  editor.selectionEnd = e + before.length;
+  render();
+  scheduleSave();
+}
+editor.addEventListener('keydown', (ev) => {
+  const mod = ev.metaKey || ev.ctrlKey;
+  if (!mod) return;
+  if (ev.key === 'b' || ev.key === 'B') { ev.preventDefault(); wrapSelection('**','**'); }
+  else if (ev.key === 'i' || ev.key === 'I') { ev.preventDefault(); wrapSelection('*','*'); }
+  else if (ev.key === 'k' || ev.key === 'K') {
+    ev.preventDefault();
+    const s = editor.selectionStart, e = editor.selectionEnd;
+    const sel = editor.value.substring(s, e) || '链接文字';
+    const before = '[';
+    const after = '](https://)';
+    const next = editor.value.substring(0,s) + before + sel + after + editor.value.substring(e);
+    editor.value = next;
+    editor.selectionStart = s + 1;
+    editor.selectionEnd = s + 1 + sel.length;
+    render();
+    scheduleSave();
+  }
+});
+
+/* ---------- 导入/导出 ---------- */
+document.getElementById('export-btn').addEventListener('click', () => {
+  const blob = new Blob([editor.value], {type:'text/markdown'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const ts = new Date().toISOString().replace(/[:.]/g,'-').slice(0,19);
+  a.href = url;
+  a.download = `draft-${ts}.md`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+});
+
+const importInput = document.getElementById('import-input');
+document.getElementById('import-btn').addEventListener('click', () => importInput.click());
+importInput.addEventListener('change', () => {
+  const file = importInput.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    if (editor.value.trim() && !confirm('当前编辑器有内容，确认覆盖？')) return;
+    editor.value = reader.result;
+    render();
+    scheduleSave();
+  };
+  reader.readAsText(file);
+  importInput.value = '';
+});
+
+/* ---------- 清空 ---------- */
+document.getElementById('clear-btn').addEventListener('click', () => {
+  if (!editor.value.trim()) return;
+  if (!confirm('清空当前编辑器内容？此操作不可撤销（建议先导出 .md 备份）。')) return;
+  editor.value = '';
+  render();
+  scheduleSave();
+});
+
+/* ---------- 复制 ---------- */
+function showToast(msg, isError) {
+  toast.textContent = msg;
+  toast.classList.toggle('error', !!isError);
+  toast.classList.add('show');
+  setTimeout(() => toast.classList.remove('show'), 1800);
+}
+
+function copyViaExecCommand(html) {
+  // 在 iframe / 受限环境里 navigator.clipboard 经常被禁，这条路径稳定
+  const div = document.createElement('div');
+  div.contentEditable = 'true';
+  div.innerHTML = html;
+  // 让它可见但不显眼（execCommand 要求被选元素在视口内才稳定生效）
+  div.style.position = 'fixed';
+  div.style.top = '0';
+  div.style.left = '0';
+  div.style.opacity = '0';
+  div.style.pointerEvents = 'none';
+  div.style.whiteSpace = 'pre-wrap';
+  document.body.appendChild(div);
+  const range = document.createRange();
+  range.selectNodeContents(div);
+  const sel = window.getSelection();
+  sel.removeAllRanges();
+  sel.addRange(range);
+  let ok = false;
+  try { ok = document.execCommand('copy'); } catch (_) { ok = false; }
+  sel.removeAllRanges();
+  document.body.removeChild(div);
+  return ok;
+}
+
+async function copyHtml() {
+  // 复制时不带 data-line（仅用于编辑器内部滚动锚定）
+  const html = renderToHtml(editor.value, styleSelect.value, false);
+  // 优先尝试现代 API（粘到公众号格式最稳）
+  let succeeded = false;
+  if (navigator.clipboard && window.ClipboardItem) {
+    try {
+      const tmp = document.createElement('div');
+      tmp.innerHTML = html;
+      const text = tmp.innerText;
+      await navigator.clipboard.write([
+        new ClipboardItem({
+          'text/html': new Blob([html], {type:'text/html'}),
+          'text/plain': new Blob([text], {type:'text/plain'})
+        })
+      ]);
+      succeeded = true;
+    } catch (err) {
+      console.warn('[copy] clipboard.write 失败，回退到 execCommand：', err);
+    }
+  }
+  // 回退：execCommand（iframe / 沙箱环境也能用）
+  if (!succeeded) {
+    try {
+      succeeded = copyViaExecCommand(html);
+    } catch (err) {
+      console.error('[copy] execCommand 也失败：', err);
+    }
+  }
+  if (succeeded) {
+    showToast('✓ 已复制，去公众号粘贴吧');
+    return;
+  }
+  // 终极兜底：弹窗新窗口，让用户手动 Cmd+A / Cmd+C
+  openCopyFallbackWindow(html);
+}
+
+function openCopyFallbackWindow(html) {
+  const w = window.open('', '_blank', 'width=720,height=800');
+  if (!w) {
+    showToast('复制失败，且新窗口被拦截，请允许弹窗后重试', true);
+    return;
+  }
+  const fallbackPage = `<!doctype html>
+<html><head><meta charset="UTF-8"><title>复制到公众号</title>
+<style>
+  body { font-family:-apple-system,sans-serif; margin:0; padding:20px; }
+  .tip { background:#fff7e0; border:1px solid #f0c040; padding:12px 16px; border-radius:6px; margin-bottom:16px; font-size:14px; line-height:1.6; color:#7a5500; }
+  .tip kbd { background:#fff; border:1px solid #d0a040; padding:2px 6px; border-radius:3px; font-family:monospace; }
+  .tip button { margin-left:12px; padding:4px 12px; background:#1a8917; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:13px; }
+  #content { border:1px solid #e0e0e0; padding:16px; border-radius:6px; }
+</style>
+</head><body>
+<div class="tip">
+  当前环境复制 API 受限。请按 <kbd>Cmd/Ctrl + A</kbd> 全选，再按 <kbd>Cmd/Ctrl + C</kbd> 复制。
+  <button id="auto-copy">尝试自动复制</button>
+</div>
+<div id="content" contenteditable="true">${html}</div>
+<script>
+  const c = document.getElementById('content');
+  // 自动选中
+  setTimeout(() => {
+    const range = document.createRange();
+    range.selectNodeContents(c);
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
+    c.focus();
+  }, 100);
+  document.getElementById('auto-copy').addEventListener('click', async () => {
+    try {
+      const blob = new Blob([c.innerHTML], {type:'text/html'});
+      const text = c.innerText;
+      await navigator.clipboard.write([
+        new ClipboardItem({'text/html': blob, 'text/plain': new Blob([text], {type:'text/plain'})})
+      ]);
+      alert('已复制，去公众号粘贴吧');
+    } catch (err) {
+      alert('自动复制失败：' + err.message + '\\n请手动 Cmd+A 全选 → Cmd+C 复制');
+    }
+  });
+<\/script>
+</body></html>`;
+  w.document.open();
+  w.document.write(fallbackPage);
+  w.document.close();
+}
+document.getElementById('copy-btn').addEventListener('click', copyHtml);
+
+/* ---------- Markdown 语法帮助弹窗 ---------- */
+const HELP_CONTENT = {
+  basic: `
+<h4>1. 起标题</h4>
+<p>在文字前面加井号 <code>#</code>，井号<strong>个数</strong>决定标题大小（井号后面要有一个<strong>空格</strong>）。</p>
+
+<p><strong>大标题</strong>（一个井号 <code>#</code>）—— 用于文章总标题：</p>
+<div class="example">
+  <div class="src"># 这是大标题</div>
+  <div class="out"><strong style="font-size:20px">这是大标题</strong></div>
+</div>
+
+<p><strong>中标题</strong>（两个井号 <code>##</code>）—— 用于文章里分章节：</p>
+<div class="example">
+  <div class="src">## 这是中标题</div>
+  <div class="out"><strong style="font-size:17px">这是中标题</strong></div>
+</div>
+
+<p><strong>小标题</strong>（三个井号 <code>###</code>）—— 用于章节里再分小段：</p>
+<div class="example">
+  <div class="src">### 这是小标题</div>
+  <div class="out"><strong style="font-size:15px">这是小标题</strong></div>
+</div>
+
+<h4>2. 让字变粗</h4>
+<p>想让某段文字加粗，前后各加两个星号 <code>**</code>：</p>
+<div class="example">
+  <div class="src">这一段里 **重点字** 会加粗</div>
+  <div class="out">这一段里 <strong>重点字</strong> 会加粗</div>
+</div>
+
+<h4>3. 列清单</h4>
+<p><strong>无序清单</strong>（不分先后）—— 每行开头打一个星号 <code>*</code> 加空格：</p>
+<div class="example">
+  <div class="src">* 早上喝咖啡
+* 中午吃面
+* 晚上散步</div>
+  <div class="out">• 早上喝咖啡<br>• 中午吃面<br>• 晚上散步</div>
+</div>
+
+<p><strong>有序清单</strong>（按顺序）—— 每行开头打 <code>1.</code> <code>2.</code> <code>3.</code> 加空格（数字后面是英文句点）：</p>
+<div class="example">
+  <div class="src">1. 把锅放火上
+2. 倒油
+3. 下菜</div>
+  <div class="out">1. 把锅放火上<br>2. 倒油<br>3. 下菜</div>
+</div>
+<div class="tip">小提醒：数字不一定要从 1 开始连续写，写 <code>1.</code> <code>1.</code> <code>1.</code> 也会自动按 1、2、3 显示。</div>
+
+<h4>4. 换段落</h4>
+<p>两段之间<strong>空一行</strong>，工具就知道这是新段落了：</p>
+<div class="example">
+  <div class="src">这是第一段。
+
+这是第二段。</div>
+  <div class="out">这是第一段。<br><br>这是第二段。</div>
+</div>
+
+<div class="tip">入门到这一步就够你写大部分公众号文章了。想要斜体、链接、引用、分割线，去看进阶版。</div>
+`,
+  advanced: `
+<h4>1. 斜体（用得少）</h4>
+<p>前后各加一个星号 <code>*</code>：</p>
+<div class="example">
+  <div class="src">这是 *斜体* 字</div>
+  <div class="out">这是 <em>斜体</em> 字</div>
+</div>
+
+<h4>2. 加链接</h4>
+<p>方括号写显示文字，圆括号写网址：</p>
+<div class="example">
+  <div class="src">点击 [这里](https://example.com) 查看详情</div>
+  <div class="out">点击 <a href="#" style="color:#0066cc">这里</a> 查看详情</div>
+</div>
+
+<h4>3. 引用别人说的话</h4>
+<p>每行开头加一个大于号 <code>&gt;</code>：</p>
+<div class="example">
+  <div class="src">&gt; 慢就是快。
+&gt; —— 某位前辈</div>
+  <div class="out" style="border-left:3px solid #ccc; padding-left:10px; color:#666">慢就是快。<br>—— 某位前辈</div>
+</div>
+
+<h4>4. 分割线</h4>
+<p>单独一行，三个减号 <code>---</code>，用来把文章分段隔开：</p>
+<div class="example">
+  <div class="src">上半部分内容。
+
+---
+
+下半部分内容。</div>
+  <div class="out">上半部分内容。<br><hr style="border:none;border-top:1px solid #ddd;margin:8px 0"><br>下半部分内容。</div>
+</div>
+
+<h4>5. 表格</h4>
+<p>用竖线 <code>|</code> 分隔每一格，<strong>第二行必须是分隔线</strong>（每格至少三个减号 <code>---</code>），后面就是数据行：</p>
+<div class="example">
+  <div class="src">| 姓名 | 年龄 | 城市 |
+| --- | --- | --- |
+| 小明 | 28 | 上海 |
+| 小红 | 25 | 北京 |</div>
+  <div class="out"><table style="border-collapse:collapse;font-size:13px"><thead><tr style="background:#333;color:#fff"><th style="border:1px solid #333;padding:4px 8px">姓名</th><th style="border:1px solid #333;padding:4px 8px">年龄</th><th style="border:1px solid #333;padding:4px 8px">城市</th></tr></thead><tbody><tr><td style="border:1px solid #ccc;padding:4px 8px">小明</td><td style="border:1px solid #ccc;padding:4px 8px">28</td><td style="border:1px solid #ccc;padding:4px 8px">上海</td></tr><tr><td style="border:1px solid #ccc;padding:4px 8px">小红</td><td style="border:1px solid #ccc;padding:4px 8px">25</td><td style="border:1px solid #ccc;padding:4px 8px">北京</td></tr></tbody></table></div>
+</div>
+<p>想控制对齐，把分隔线里的减号配上冒号：<code>:---</code> 左对齐、<code>:---:</code> 居中、<code>---:</code> 右对齐。</p>
+<div class="tip">表格写完最好空一行再写下一段，避免被当成表格的延续行。</div>
+
+<div class="tip">写完之后切换上面的"风格"看看不同效果，挑顺眼的复制到公众号即可。</div>
+`
+};
+
+const helpModal = document.getElementById('help-modal');
+const helpBody = document.getElementById('help-body');
+const helpTabs = document.querySelectorAll('.modal-tabs button');
+
+function showHelpTab(tab) {
+  helpBody.innerHTML = HELP_CONTENT[tab];
+  helpTabs.forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+  helpBody.scrollTop = 0;
+}
+
+document.getElementById('help-btn').addEventListener('click', () => {
+  showHelpTab('basic');
+  helpModal.classList.add('show');
+});
+document.getElementById('help-close').addEventListener('click', () => helpModal.classList.remove('show'));
+helpModal.addEventListener('click', (e) => {
+  if (e.target === helpModal) helpModal.classList.remove('show');
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && helpModal.classList.contains('show')) helpModal.classList.remove('show');
+});
+helpTabs.forEach(b => b.addEventListener('click', () => showHelpTab(b.dataset.tab)));
+
+/* ---------- 查找替换 ---------- */
+const findBar = document.getElementById('find-bar');
+const findInput = document.getElementById('find-input');
+const replaceInput = document.getElementById('replace-input');
+const findCount = document.getElementById('find-count');
+const findCaseCb = document.getElementById('find-case');
+
+let findMatches = [];
+let findIdx = -1;
+
+function computeMatches() {
+  const needle = findInput.value;
+  if (!needle) { findMatches = []; findIdx = -1; updateFindCount(); return; }
+  const hay = editor.value;
+  const flags = findCaseCb.checked ? 'g' : 'gi';
+  const escaped = needle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const re = new RegExp(escaped, flags);
+  const ms = [];
+  let m;
+  while ((m = re.exec(hay)) !== null) {
+    ms.push([m.index, m.index + m[0].length]);
+    if (m.index === re.lastIndex) re.lastIndex++; // 防空匹配死循环
+  }
+  findMatches = ms;
+  // 找到光标所在或之后的第一个匹配
+  const cur = editor.selectionStart;
+  findIdx = findMatches.findIndex(([s]) => s >= cur);
+  if (findIdx === -1 && findMatches.length > 0) findIdx = 0;
+  updateFindCount();
+  highlightCurrent();
+}
+
+function updateFindCount() {
+  if (!findInput.value) { findCount.textContent = ''; findCount.classList.remove('no-match'); return; }
+  if (findMatches.length === 0) {
+    findCount.textContent = '无结果';
+    findCount.classList.add('no-match');
+  } else {
+    findCount.textContent = `${findIdx + 1}/${findMatches.length}`;
+    findCount.classList.remove('no-match');
+  }
+}
+
+function highlightCurrent() {
+  if (findIdx < 0 || findIdx >= findMatches.length) return;
+  const [s, e] = findMatches[findIdx];
+  editor.focus();
+  editor.setSelectionRange(s, e);
+  // 把当前匹配滚到可见
+  const lineHeight = parseFloat(getComputedStyle(editor).lineHeight) || 22;
+  const before = editor.value.substring(0, s);
+  const lineNum = (before.match(/\n/g) || []).length;
+  editor.scrollTop = Math.max(0, lineNum * lineHeight - editor.clientHeight / 3);
+}
+
+function findNext(dir) {
+  if (findMatches.length === 0) return;
+  findIdx = (findIdx + dir + findMatches.length) % findMatches.length;
+  updateFindCount();
+  highlightCurrent();
+}
+
+function replaceCurrent() {
+  if (findIdx < 0 || findIdx >= findMatches.length) return;
+  const [s, e] = findMatches[findIdx];
+  // 仅当编辑器当前选区刚好是这次匹配时才替换；否则先高亮，再让用户按一次"替换"
+  if (editor.selectionStart === s && editor.selectionEnd === e) {
+    const rep = replaceInput.value;
+    editor.value = editor.value.substring(0, s) + rep + editor.value.substring(e);
+    editor.dispatchEvent(new Event('input'));
+    // 重新计算匹配，光标停在替换后位置
+    editor.setSelectionRange(s + rep.length, s + rep.length);
+    computeMatches();
+  } else {
+    highlightCurrent();
+  }
+}
+
+function replaceAll() {
+  if (findMatches.length === 0) return;
+  const needle = findInput.value;
+  const rep = replaceInput.value;
+  const flags = findCaseCb.checked ? 'g' : 'gi';
+  const escaped = needle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const re = new RegExp(escaped, flags);
+  const before = editor.value;
+  editor.value = before.replace(re, rep);
+  editor.dispatchEvent(new Event('input'));
+  showToast(`已替换 ${findMatches.length} 处`);
+  computeMatches();
+}
+
+function openFindBar() {
+  findBar.classList.add('show');
+  findInput.focus();
+  findInput.select();
+  computeMatches();
+}
+function closeFindBar() {
+  findBar.classList.remove('show');
+  editor.focus();
+}
+
+findInput.addEventListener('input', computeMatches);
+findCaseCb.addEventListener('change', computeMatches);
+findInput.addEventListener('keydown', (ev) => {
+  if (ev.key === 'Enter') {
+    ev.preventDefault();
+    findNext(ev.shiftKey ? -1 : 1);
+  } else if (ev.key === 'Escape') {
+    ev.preventDefault();
+    closeFindBar();
+  }
+});
+replaceInput.addEventListener('keydown', (ev) => {
+  if (ev.key === 'Enter') { ev.preventDefault(); replaceCurrent(); }
+  else if (ev.key === 'Escape') { ev.preventDefault(); closeFindBar(); }
+});
+document.getElementById('find-prev').addEventListener('click', () => findNext(-1));
+document.getElementById('find-next').addEventListener('click', () => findNext(1));
+document.getElementById('find-replace').addEventListener('click', replaceCurrent);
+document.getElementById('find-replace-all').addEventListener('click', replaceAll);
+document.getElementById('find-close').addEventListener('click', closeFindBar);
+document.getElementById('find-open-btn').addEventListener('click', openFindBar);
+
+// Cmd/Ctrl + F 打开查找面板（拦截浏览器默认的页面查找）
+document.addEventListener('keydown', (ev) => {
+  if ((ev.metaKey || ev.ctrlKey) && (ev.key === 'f' || ev.key === 'F')) {
+    // 仅在编辑器获得焦点或查找栏内时拦截，避免影响其他场景
+    const t = ev.target;
+    const inEditor = t === editor || findBar.contains(t);
+    if (inEditor || document.activeElement === editor) {
+      ev.preventDefault();
+      openFindBar();
+    }
+  }
+});
+</script>
+
+</body>
+</html>
